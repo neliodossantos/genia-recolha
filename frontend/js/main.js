@@ -33,6 +33,7 @@ let handLandmarker = null;
 let mediaRecorder = null;
 let recordedChunks = [];
 let landmarkBuffer = createLandmarkBuffer();
+let skippedWords = new Set();
 
 async function loadHandLandmarker() {
   const filesetResolver = await FilesetResolver.forVisionTasks(
@@ -61,7 +62,8 @@ async function fetchProgress(forSignerId) {
 }
 
 function updateWordDisplay() {
-  currentWord = pickNextWord(vocabulary, counts, TARGET_PER_WORD);
+  const availableWords = vocabulary.filter((w) => !skippedWords.has(w));
+  currentWord = pickNextWord(availableWords, counts, TARGET_PER_WORD);
   if (currentWord === null) {
     currentWordEl.textContent = "Concluído!";
     progressLabelEl.textContent = `Todas as ${vocabulary.length} palavras atingiram ${TARGET_PER_WORD} gravações.`;
@@ -72,6 +74,17 @@ function updateWordDisplay() {
   const count = counts[currentWord] || 0;
   progressLabelEl.textContent = `${count}/${TARGET_PER_WORD} gravações`;
   recordButton.disabled = false;
+}
+
+function skipCurrentWord() {
+  if (currentWord !== null) {
+    skippedWords.add(currentWord);
+  }
+  const remaining = vocabulary.filter((w) => !skippedWords.has(w));
+  if (remaining.length === 0) {
+    skippedWords.clear();
+  }
+  updateWordDisplay();
 }
 
 function detectionLoop() {
@@ -164,6 +177,7 @@ async function onRecordButtonClick() {
     try {
       await uploadRecording(currentWord, videoBlob);
       counts[currentWord] = (counts[currentWord] || 0) + 1;
+      skippedWords.delete(currentWord);
       statusEl.textContent = "Gravação guardada.";
       updateWordDisplay();
     } catch (error) {
@@ -188,18 +202,24 @@ async function startSession() {
   recordingSession.hidden = false;
   statusEl.textContent = "A carregar o modelo de deteção de mãos...";
 
-  [vocabulary, counts, handLandmarker] = await Promise.all([
-    fetchVocabulary(),
-    fetchProgress(signerId),
-    loadHandLandmarker(),
-  ]);
+  try {
+    [vocabulary, counts, handLandmarker] = await Promise.all([
+      fetchVocabulary(),
+      fetchProgress(signerId),
+      loadHandLandmarker(),
+    ]);
 
-  await startCamera();
-  statusEl.textContent = "";
-  updateWordDisplay();
-  detectionLoop();
+    await startCamera();
+    statusEl.textContent = "";
+    updateWordDisplay();
+    detectionLoop();
+  } catch (error) {
+    statusEl.textContent = `Erro ao iniciar: ${error.message}. Recarrega a página para tentar novamente.`;
+    signerSetup.hidden = false;
+    recordingSession.hidden = true;
+  }
 }
 
 startSessionButton.addEventListener("click", startSession);
 recordButton.addEventListener("click", onRecordButtonClick);
-nextWordButton.addEventListener("click", updateWordDisplay);
+nextWordButton.addEventListener("click", skipCurrentWord);
