@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Recolha de Gestos LGA</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <section id="signer-setup">
+      <label for="signer-id">O teu identificador (ex: o teu nome):</label>
+      <input type="text" id="signer-id" />
+      <button id="start-session">Começar</button>
+    </section>
+
+    <section id="recording-session" hidden>
+      <h1 id="current-word"></h1>
+      <p id="progress-label"></p>
+      <div class="video-wrap">
+        <video id="camera-preview" autoplay muted playsinline></video>
+        <canvas id="landmark-overlay"></canvas>
+      </div>
+      <button id="record-button">Gravar</button>
+      <button id="next-word-button">Próxima palavra</button>
+      <p id="status-message"></p>
+    </section>
+  </main>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
