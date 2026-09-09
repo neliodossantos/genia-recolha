@@ -45,6 +45,45 @@ def test_post_recording_saves_files_and_returns_id(tmp_path):
     assert "id" in body
 
 
+def test_post_recording_rejects_word_not_in_vocabulary(tmp_path):
+    client = make_client(tmp_path)
+    response = client.post(
+        "/api/recordings",
+        data={
+            "word": "../evil",
+            "signer_id": "signer1",
+            "landmarks": json.dumps([{"t": 0, "hands": []}]),
+        },
+        files={"video": ("clip.webm", b"fake-bytes", "video/webm")},
+    )
+    assert response.status_code == 400
+
+
+def test_post_recording_rejects_signer_id_with_path_separator(tmp_path):
+    client = make_client(tmp_path)
+    response = client.post(
+        "/api/recordings",
+        data={
+            "word": "olá",
+            "signer_id": "../evil",
+            "landmarks": json.dumps([{"t": 0, "hands": []}]),
+        },
+        files={"video": ("clip.webm", b"fake-bytes", "video/webm")},
+    )
+    assert response.status_code == 400
+
+    response = client.post(
+        "/api/recordings",
+        data={
+            "word": "olá",
+            "signer_id": "a/b",
+            "landmarks": json.dumps([{"t": 0, "hands": []}]),
+        },
+        files={"video": ("clip.webm", b"fake-bytes", "video/webm")},
+    )
+    assert response.status_code == 400
+
+
 def test_post_recording_rejects_invalid_landmarks_json(tmp_path):
     client = make_client(tmp_path)
     response = client.post(

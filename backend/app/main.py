@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -43,6 +44,11 @@ def create_app(
         landmarks: str = Form(...),
         video: UploadFile = File(...),
     ):
+        if word not in load_vocabulary(vocabulary_path):
+            raise HTTPException(status_code=400, detail="unknown word")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", signer_id):
+            raise HTTPException(status_code=400, detail="invalid signer_id")
+
         try:
             parsed_landmarks = json.loads(landmarks)
         except json.JSONDecodeError as exc:
