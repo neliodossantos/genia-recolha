@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +19,7 @@ def create_app(
     # threads: FastAPI runs sync path operations in a threadpool, and a
     # single sqlite3.Connection (default check_same_thread=True) cannot be
     # reused from a different thread than the one that created it.
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     init_conn = get_connection(db_path)
     init_db(init_conn)
     init_conn.close()
