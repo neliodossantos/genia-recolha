@@ -18,6 +18,12 @@ def test_save_recording_files_sanitizes_word_with_spaces(tmp_path):
     assert "por_favor" in video_path
 
 
+def test_save_recording_files_sanitizes_signer_id_with_spaces(tmp_path):
+    video_path, _ = save_recording_files(str(tmp_path), "olá", "Nélio Santos", b"x", [])
+    assert " " not in Path(video_path).name
+    assert "Nélio_Santos" in video_path
+
+
 def test_save_recording_files_creates_unique_paths_for_same_word(tmp_path):
     video_path1, _ = save_recording_files(str(tmp_path), "olá", "signer1", b"x", [])
     video_path2, _ = save_recording_files(str(tmp_path), "olá", "signer1", b"x", [])

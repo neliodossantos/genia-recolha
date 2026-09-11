@@ -17,8 +17,9 @@ def save_recording_files(
     landmarks_dir.mkdir(parents=True, exist_ok=True)
 
     safe_word = word.replace(" ", "_")
+    safe_signer_id = signer_id.replace(" ", "_")
     recording_id = uuid.uuid4().hex
-    filename_stem = f"{safe_word}__{signer_id}__{recording_id}"
+    filename_stem = f"{safe_word}__{safe_signer_id}__{recording_id}"
 
     video_path = videos_dir / f"{filename_stem}.webm"
     landmarks_path = landmarks_dir / f"{filename_stem}.json"

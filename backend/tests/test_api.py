@@ -84,6 +84,21 @@ def test_post_recording_rejects_signer_id_with_path_separator(tmp_path):
     assert response.status_code == 400
 
 
+def test_post_recording_accepts_signer_id_with_accents_and_spaces(tmp_path):
+    client = make_client(tmp_path)
+    response = client.post(
+        "/api/recordings",
+        data={
+            "word": "olá",
+            "signer_id": "Nélio Santos",
+            "landmarks": json.dumps([{"t": 0, "hands": []}]),
+        },
+        files={"video": ("clip.webm", b"fake-bytes", "video/webm")},
+    )
+    assert response.status_code == 200
+    assert response.json()["signer_id"] == "Nélio Santos"
+
+
 def test_post_recording_rejects_invalid_landmarks_json(tmp_path):
     client = make_client(tmp_path)
     response = client.post(

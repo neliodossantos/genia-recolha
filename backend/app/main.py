@@ -1,5 +1,4 @@
 import json
-import re
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -46,7 +45,13 @@ def create_app(
     ):
         if word not in load_vocabulary(vocabulary_path):
             raise HTTPException(status_code=400, detail="unknown word")
-        if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", signer_id):
+        if (
+            not signer_id
+            or len(signer_id) > 64
+            or "/" in signer_id
+            or "\\" in signer_id
+            or ".." in signer_id
+        ):
             raise HTTPException(status_code=400, detail="invalid signer_id")
 
         try:
