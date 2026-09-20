@@ -1,0 +1,8 @@
+name = "lga-recolha"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+[[r2_buckets]]
+binding = "RECORDINGS_BUCKET"
+bucket_name = "lga-recordings"

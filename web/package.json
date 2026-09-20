@@ -1,0 +1,32 @@
+{
+  "name": "web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare && node scripts/copy-mediapipe.mjs",
+    "test": "vitest run",
+    "typecheck": "nuxi typecheck"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
+    "@nuxt/ui": "^3.3.7",
+    "@supabase/supabase-js": "^2.116.0",
+    "nitro-cloudflare-dev": "^0.2.2",
+    "nuxt": "^3.21.11",
+    "tailwindcss": "^4.3.3",
+    "vue": "^3.5.40",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "supabase": "^2.117.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1",
+    "vue-tsc": "^3.3.11",
+    "wrangler": "^4.135.0"
+  }
+}
