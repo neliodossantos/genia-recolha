@@ -1,5 +1,4 @@
 <script setup lang="ts">
-const TARGET_PER_WORD = 20
 const { $supabase } = useNuxtApp()
 const { session } = useAuth()
 

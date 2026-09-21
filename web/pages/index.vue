@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { createHandTracker } from '~/composables/useHandTracker'
 import { createRecorder, openCamera, type RecordedClip } from '~/composables/useRecorder'
+import { averageLuma, handStatus, isTooDark, noHandsHint } from '~/utils/guidance'
 import { addFrame, createLandmarkBuffer, serializeBuffer, type LandmarkBuffer } from '~/utils/landmarks'
 import { uploadRecording } from '~/utils/uploadClient'
 import { pickNextWord, type VocabWord } from '~/utils/words'
 
-const TARGET_PER_WORD = 20
 const COUNTDOWN_SECONDS = 3
 const MAX_RECORDING_MS = 14_000
+const TIPS_SEEN_KEY = 'lga.tips-seen'
+const LUMA_INTERVAL_MS = 500
 
-type Phase = 'loading' | 'ready' | 'countdown' | 'recording' | 'uploading' | 'retry' | 'fatal'
+type Phase = 'intro' | 'loading' | 'ready' | 'countdown' | 'recording' | 'uploading' | 'retry' | 'fatal'
 
 const { $supabase } = useNuxtApp()
 const { session, signOut } = useAuth()
@@ -18,6 +20,11 @@ const phase = ref<Phase>('loading')
 const fatalError = ref('')
 const message = ref('')
 const countdown = ref(COUNTDOWN_SECONDS)
+
+const showTips = ref(false)
+const handsCount = ref(0)
+const noHandsMessage = ref<string | null>(null)
+const tooDark = ref(false)
 
 const words = ref<VocabWord[]>([])
 const counts = ref<Record<number, number>>({})
@@ -33,6 +40,9 @@ let recorder: ReturnType<typeof createRecorder> | null = null
 let buffer: LandmarkBuffer | null = null
 let frameHandle = 0
 let lastDetectMs = 0
+let noHandsSince: number | null = null
+let lastLumaMs = 0
+let lumaCanvas: HTMLCanvasElement | null = null
 let stopTimer: ReturnType<typeof setTimeout> | null = null
 let pending: { clip: RecordedClip; landmarksJson: string; wordId: number } | null = null
 
@@ -72,6 +82,29 @@ function drawOverlay(landmarks: { x: number; y: number }[][]) {
   }
 }
 
+function updateGuidance(now: number, count: number) {
+  handsCount.value = count
+  if (count > 0) {
+    noHandsSince = null
+    noHandsMessage.value = null
+    return
+  }
+  if (noHandsSince === null) noHandsSince = now
+  noHandsMessage.value = noHandsHint(now - noHandsSince)
+}
+
+function checkBrightness(video: HTMLVideoElement, now: number) {
+  if (now - lastLumaMs < LUMA_INTERVAL_MS) return
+  lastLumaMs = now
+  lumaCanvas ??= document.createElement('canvas')
+  lumaCanvas.width = 32
+  lumaCanvas.height = 24
+  const ctx = lumaCanvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return
+  ctx.drawImage(video, 0, 0, 32, 24)
+  tooDark.value = isTooDark(averageLuma(ctx.getImageData(0, 0, 32, 24).data))
+}
+
 function detectionLoop() {
   try {
     const video = videoEl.value
@@ -82,6 +115,8 @@ function detectionLoop() {
         lastDetectMs = now
         const result = tracker.detect(video, now)
         drawOverlay(result.landmarks)
+        updateGuidance(now, result.landmarks.length)
+        checkBrightness(video, now)
         if (phase.value === 'recording' && buffer) addFrame(buffer, now, result)
       }
     }
@@ -103,7 +138,29 @@ async function loadData() {
   counts.value = Object.fromEntries(progress.data.map((row) => [row.word_id, row.count]))
 }
 
+function readTipsSeen(): boolean {
+  try {
+    return localStorage.getItem(TIPS_SEEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markTipsSeen() {
+  try {
+    localStorage.setItem(TIPS_SEEN_KEY, '1')
+  } catch {
+    // private mode: the tips will simply show again next time
+  }
+}
+
+function startFromIntro() {
+  markTipsSeen()
+  void start()
+}
+
 async function start() {
+  phase.value = 'loading'
   try {
     await loadData()
     stream = await openCamera()
@@ -205,7 +262,10 @@ function discardPending() {
   phase.value = 'ready'
 }
 
-onMounted(start)
+onMounted(() => {
+  if (readTipsSeen()) void start()
+  else phase.value = 'intro'
+})
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(frameHandle)
@@ -221,9 +281,27 @@ onBeforeUnmount(() => {
       <div class="flex gap-2">
         <UButton to="/progress" variant="ghost" size="sm">Progresso</UButton>
         <UButton to="/admin" variant="ghost" size="sm">Admin</UButton>
+        <UButton variant="ghost" size="sm" @click="() => { showTips = true }">Dicas</UButton>
       </div>
       <UButton variant="ghost" size="sm" @click="logout">Sair</UButton>
     </header>
+
+    <UModal v-model:open="showTips" title="Dicas para gravar bem">
+      <template #body>
+        <TipsCard />
+      </template>
+    </UModal>
+
+    <UCard v-if="phase === 'intro'">
+      <template #header>
+        <h1 class="text-xl font-semibold">Antes de começares</h1>
+        <p class="text-sm text-muted">Cinco dicas rápidas para as gravações ficarem boas.</p>
+      </template>
+      <TipsCard />
+      <template #footer>
+        <UButton size="lg" block @click="startFromIntro">Começar</UButton>
+      </template>
+    </UCard>
 
     <UAlert
       v-if="phase === 'fatal'"
@@ -237,13 +315,20 @@ onBeforeUnmount(() => {
       </template>
     </UAlert>
 
-    <template v-if="phase !== 'fatal'">
+    <div v-show="phase !== 'intro' && phase !== 'fatal'" class="space-y-4">
       <div v-if="currentWord" class="text-center space-y-1">
         <p class="text-sm text-muted">Faz o gesto para:</p>
         <h1 class="text-5xl font-bold">{{ currentWord.word }}</h1>
         <p class="text-sm">{{ wordCount }}/{{ TARGET_PER_WORD }} gravações desta palavra</p>
         <UProgress :model-value="Math.min(wordCount, TARGET_PER_WORD)" :max="TARGET_PER_WORD" />
       </div>
+      <UAlert
+        v-else-if="phase !== 'loading' && words.length === 0"
+        color="warning"
+        variant="subtle"
+        title="Ainda não há palavras para gravar"
+        description="O vocabulário está vazio. Pede ao administrador para carregar as palavras (seed.sql) no Supabase e recarrega a página."
+      />
       <div v-else-if="phase !== 'loading'" class="text-center space-y-1">
         <h1 class="text-4xl font-bold">Concluído!</h1>
         <p class="text-muted">Todas as palavras atingiram {{ TARGET_PER_WORD }} gravações.</p>
@@ -270,7 +355,28 @@ onBeforeUnmount(() => {
         >
           A preparar a câmara e o detetor de mãos…
         </div>
+        <div
+          v-if="phase !== 'loading'"
+          class="absolute top-3 right-3 rounded-full px-3 py-1 text-sm font-medium text-white"
+          :class="handStatus(handsCount).tone === 'good' ? 'bg-green-600/90' : 'bg-amber-500/90'"
+        >
+          {{ handStatus(handsCount).label }}
+        </div>
+        <div
+          v-if="phase !== 'loading' && noHandsMessage"
+          class="absolute inset-x-3 bottom-3 rounded-lg bg-black/70 px-3 py-2 text-center text-sm text-white"
+        >
+          {{ noHandsMessage }}
+        </div>
       </div>
+
+      <UAlert
+        v-if="tooDark && phase !== 'loading'"
+        color="warning"
+        variant="subtle"
+        title="Pouca luz"
+        description="Vira-te para uma janela ou acende uma luz à tua frente para as mãos serem detetadas."
+      />
 
       <div class="flex gap-2">
         <UButton
@@ -318,6 +424,6 @@ onBeforeUnmount(() => {
         <p class="text-sm text-muted">Progresso total: {{ totalDone }}/{{ totalTarget }}</p>
         <UProgress :model-value="totalDone" :max="totalTarget || 1" />
       </div>
-    </template>
+    </div>
   </div>
 </template>
