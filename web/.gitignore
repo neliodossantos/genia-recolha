@@ -6,3 +6,4 @@ dist
 .wrangler
 public/mediapipe/wasm
 supabase/.temp
+.vercel

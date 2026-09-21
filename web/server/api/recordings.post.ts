@@ -5,11 +5,7 @@ import {
   MAX_VIDEO_BYTES,
   UploadError,
 } from '../utils/recordingUpload'
-
-interface R2Bucket {
-  put(key: string, body: Uint8Array, options?: { httpMetadata?: { contentType: string } }): Promise<unknown>
-  delete(keys: string | string[]): Promise<void>
-}
+import { selectObjectStorage, type R2BucketBinding } from '../utils/objectStorage'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
@@ -41,8 +37,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'video and landmarks are required' })
   }
 
-  const bucket = (event.context.cloudflare?.env?.RECORDINGS_BUCKET ?? null) as R2Bucket | null
-  if (!bucket) {
+  const binding = (event.context.cloudflare?.env?.RECORDINGS_BUCKET ?? null) as R2BucketBinding | null
+  const storage = selectObjectStorage(
+    {
+      accountId: config.r2AccountId,
+      accessKeyId: config.r2AccessKeyId,
+      secretAccessKey: config.r2SecretAccessKey,
+      bucket: config.r2Bucket,
+    },
+    binding,
+  )
+  if (!storage) {
     throw createError({ statusCode: 500, statusMessage: 'storage not configured' })
   }
 
@@ -68,10 +73,10 @@ export default defineEventHandler(async (event) => {
           return data !== null
         },
         async putObject(key, body, contentType) {
-          await bucket.put(key, body, { httpMetadata: { contentType } })
+          await storage.put(key, body, contentType)
         },
         async deleteObjects(keys) {
-          await bucket.delete(keys)
+          await storage.delete(keys)
         },
         async insertRecording(row) {
           const { error } = await client.from('recordings').insert(row)
